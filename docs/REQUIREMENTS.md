@@ -345,13 +345,13 @@ webhook.
 
 ## 11. Milestones
 
-| #     | Scope                                                                                                                                                                                  |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0    | Spike: Agent SDK with subscription auth, streaming, interrupt, resume (incl. `sessionStore`), bypass mode, model list. Confirm worktree + snapshot approach.                           |
-| M1    | Skeleton: server, web UI, sidebar, chat with Claude Code, persistence, folder picker, scratch sessions, release/resume. **Done on the fake backend; the Claude Code adapter is next.** |
-| M2    | Worktrees, parallel sessions, status badges, notifications, delete with warnings, archive.                                                                                             |
-| M3    | Diff pane: session/last-turn views, line comments, commit/revert/merge/PR/discard.                                                                                                     |
-| M4    | Watchers: framework, GitHub PR watcher, openc tools for agents, inbox.                                                                                                                 |
-| M5    | History view + search, usage display, images, plan mode/to-dos/subagents rendering, slash commands.                                                                                    |
-| M6    | Codex adapter.                                                                                                                                                                         |
-| Later | More watcher sources and notification channels as needed, Pi adapter, shared MCP config, remote access (e.g. Tailscale), macOS.                                                        |
+| #     | Scope                                                                                                                                                                                                                        |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0    | Spike: Agent SDK with subscription auth, streaming, interrupt, resume (incl. `sessionStore`), bypass mode, model list. Confirm worktree + snapshot approach.                                                                 |
+| M1    | Skeleton: server, web UI, sidebar, chat with Claude Code, persistence, folder picker, scratch sessions, release/resume. **Done. Claude Code adapter implemented; awaiting a first live contract run and recorded fixtures.** |
+| M2    | Worktrees, parallel sessions, status badges, notifications, delete with warnings, archive.                                                                                                                                   |
+| M3    | Diff pane: session/last-turn views, line comments, commit/revert/merge/PR/discard.                                                                                                                                           |
+| M4    | Watchers: framework, GitHub PR watcher, openc tools for agents, inbox.                                                                                                                                                       |
+| M5    | History view + search, usage display, images, plan mode/to-dos/subagents rendering, slash commands.                                                                                                                          |
+| M6    | Codex adapter.                                                                                                                                                                                                               |
+| Later | More watcher sources and notification channels as needed, Pi adapter, shared MCP config, remote access (e.g. Tailscale), macOS.                                                                                              |

@@ -15,4 +15,12 @@ describe("R-PLAT-3 server arguments", () => {
   it("rejects a web URL that is not a URL", () => {
     expect(() => parseServerArguments(["--web-url=localhost"])).toThrow();
   });
+
+  it("records Claude fixtures only when asked through the environment", () => {
+    expect(parseServerArguments([], {}).claudeFixtureRecordingDirectory).toBeUndefined();
+    expect(
+      parseServerArguments([], { OPENC_RECORD_CLAUDE_FIXTURES: "/tmp/fixtures" })
+        .claudeFixtureRecordingDirectory,
+    ).toBe("/tmp/fixtures");
+  });
 });

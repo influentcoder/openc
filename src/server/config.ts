@@ -16,12 +16,16 @@ export interface ServerConfig {
   webUrl: string | undefined;
   webDistDirectory: string;
   logLevel: "silent" | "info" | "debug";
+  claudeFixtureRecordingDirectory: string | undefined;
 }
 
 export const loopbackHost = "127.0.0.1";
 export const defaultPort = 4317;
 
-export function parseServerArguments(argumentList: string[]): ServerConfig {
+export function parseServerArguments(
+  argumentList: string[],
+  environment: NodeJS.ProcessEnv = process.env,
+): ServerConfig {
   const { values } = parseArgs({
     args: argumentList,
     options: {
@@ -44,5 +48,6 @@ export function parseServerArguments(argumentList: string[]): ServerConfig {
     webUrl: z.url().optional().parse(values["web-url"]),
     webDistDirectory: resolve(import.meta.dirname, "../../dist/web"),
     logLevel: values.quiet ? "silent" : "info",
+    claudeFixtureRecordingDirectory: environment.OPENC_RECORD_CLAUDE_FIXTURES,
   };
 }

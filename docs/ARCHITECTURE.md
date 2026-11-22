@@ -49,7 +49,7 @@ openc/
         backend-adapter.ts          # BackendAdapter interface
         backend-adapter.contract.ts # contract suite for every adapter
         fake/            # scripted backend for tests and dev:fake
-        claude-code/     # (planned) Agent SDK adapter
+        claude-code/     # Agent SDK adapter (+ testing/ fake client replaying fixtures)
       workspace/         # scratch dirs, directory browser; (planned) worktrees, snapshots
       settings/          # key/value settings, new-session defaults
       platform/          # clock, ids, logger, async queue
@@ -174,33 +174,55 @@ export interface BackendCapabilities {
 export type PermissionMode = "never-ask" | "ask-edits" | "ask-all" | "plan";
 ```
 
-### Claude Code adapter (MVP)
+### Claude Code adapter
 
-- Uses `@anthropic-ai/claude-agent-sdk` `query()` in **streaming input mode**
-  (`prompt` is an `AsyncIterable<SDKUserMessage>`), so one process serves
-  the whole conversation and `send()` pushes into the iterable.
-- Options: `cwd`, `model`, `permissionMode` (`never-ask` → `bypassPermissions`,
-  `ask-edits` → `default`, `plan` → `plan`), `resume`, `includePartialMessages: true`
-  for streaming text, `settingSources: ['user', 'project', 'local']` so the
-  user's CLAUDE.md, MCP servers and skills apply, `canUseTool` to surface
-  permission prompts when not in bypass mode.
-- `interrupt()`, `setModel()`, `setPermissionMode()`, `supportedModels()`,
-  `supportedCommands()`, `accountInfo()` (subscription type) map directly.
-- openc agent tools (§8.4) are attached via `mcpServers` using an in-process
-  server from `createSdkMcpServer()`.
-- Auth: no API key is passed; the CLI uses the user's existing login
-  (`claude /login`) or `ANTHROPIC_API_KEY` if set. `status()` reports which.
-- Translates SDK messages (`assistant`, `stream_event`, `user` tool results,
-  `result`, `system`, task/to-do, rate-limit events, …) into `BackendEvent`s;
-  unknown types pass through as `raw` and render as a generic block.
+Implemented in `src/server/backends/claude-code/` (decision 0004):
+
+```
+ClaudeCodeAdapter ─► ClaudeAgentClient (port) ─► SdkClaudeAgentClient ─► Agent SDK query() ─► claude CLI
+        │                                    └─► FakeClaudeAgentClient (tests: replays fixtures/claude-code/)
+        └─► ClaudeCodeSession: raw message ─► parseClaudeMessage (zod) ─► ClaudeMessageTranslator ─► BackendEvent
+```
+
+- One `query()` per live session in **streaming input mode**: `prompt` is an
+  async queue of user messages, so one process serves the whole conversation.
+- Options (`query-options.ts`): `cwd`, `model` (omitted for the `default`
+  alias), `sessionId` for a new conversation (openc generates the UUID, so the
+  id is known before the first message) or `resume` for an existing one,
+  `includePartialMessages: true`, `permissionMode: "bypassPermissions"` with
+  `allowDangerouslySkipPermissions` (R-CHAT-7), and
+  `settingSources: ["user", "project", "local"]` so CLAUDE.md, MCP servers and
+  skills apply.
+- Resume checks `getSessionInfo(id, { dir })` first and throws
+  `BackendSessionNotFoundError` when Claude Code no longer has the transcript,
+  which triggers the context-rebuilt path.
+- Status and models come from one short-lived probe `query()`
+  (`supportedModels()`, `accountInfo()`), cached until it fails. Only the plan
+  type and API key source are used; the e-mail address is never read.
+- Translation: text deltas are keyed by API message id + text block ordinal,
+  so streamed deltas and the final per-block assistant messages line up;
+  replies that were not streamed get one delta with the whole text. Tool use
+  and tool results become `tool.started` / `tool.completed` (kind and summary
+  from `tool-presentation.ts`). A result ends the turn: interrupted when openc
+  asked for an interrupt or `terminal_reason` is `aborted_*`, error when
+  `is_error` or a non-success subtype. Assistant messages carrying an `error`
+  are skipped because the result reports the same failure.
+- Not yet translated: subagent messages (`parent_tool_use_id` set), thinking,
+  to-dos, plan mode, permission prompts, rate-limit events.
+- Auth: no API key is passed; the CLI uses the user's own login or
+  `ANTHROPIC_API_KEY`. Claude Code refuses bypass mode as root, so openc must
+  run as a normal user.
+- Fixture recording: set `OPENC_RECORD_CLAUDE_FIXTURES=<dir>` (server or
+  `pnpm test:contract:live`) to write each conversation as fixture JSONL,
+  scrubbed of paths and system-message details (`fixtures/claude-code/README.md`).
 
 ### Fake adapter
 
-Scripted, deterministic backend (`backends/fake/`): replies `Echo #n: <text>`
+Scripted, deterministic backend used by `pnpm dev:fake` and the e2e tests (`backends/fake/`): replies `Echo #n: <text>`
 where `n` counts messages in the backend conversation (so resume is
 observable), runs a fake `ls` tool when the message contains "tool", streams
-slowly with "slow", and fails with "fail". Once the Claude Code adapter
-exists, the fake will also replay recorded real sessions from `fixtures/`.
+slowly with "slow", and fails with "fail". Fidelity to Claude Code itself is
+covered separately by the Claude Code adapter's fixture-replaying fake client.
 
 ## 4. Event model
 

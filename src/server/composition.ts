@@ -2,6 +2,8 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { BackendAdapter } from "./backends/backend-adapter.ts";
 import { BackendRegistry } from "./backends/backend-registry.ts";
+import { ClaudeCodeAdapter } from "./backends/claude-code/claude-code-adapter.ts";
+import { SdkClaudeAgentClient } from "./backends/claude-code/sdk-claude-agent-client.ts";
 import { FakeBackendAdapter } from "./backends/fake/fake-backend-adapter.ts";
 import type { ServerConfig } from "./config.ts";
 import { type AppDatabase, openDatabase } from "./db/open-database.ts";
@@ -107,12 +109,16 @@ export async function createExternalDependencies(
   await mkdir(config.dataDirectory, { recursive: true });
   const clock = systemClock;
   const ids = randomIdGenerator;
+  const logger = createLogger(config.logLevel);
   return {
     database: openDatabase(join(config.dataDirectory, "openc.db")),
     clock,
     ids,
-    logger: createLogger(config.logLevel),
-    backends: config.mode === "fake" ? [createFakeBackend(clock, ids)] : [],
+    logger,
+    backends:
+      config.mode === "fake"
+        ? [createFakeBackend(clock, ids)]
+        : [createClaudeCodeBackend(config, ids, logger)],
     dataDirectory: config.dataDirectory,
     browseRoot: config.browseRoot,
     limits: defaultLimits,
@@ -121,4 +127,16 @@ export async function createExternalDependencies(
 
 function createFakeBackend(clock: Clock, ids: IdGenerator): BackendAdapter {
   return new FakeBackendAdapter({ ids, pace: () => delay(clock, fakeStreamingDelayMilliseconds) });
+}
+
+function createClaudeCodeBackend(
+  config: ServerConfig,
+  ids: IdGenerator,
+  logger: Logger,
+): BackendAdapter {
+  const client = new SdkClaudeAgentClient({
+    logger,
+    recordingDirectory: config.claudeFixtureRecordingDirectory,
+  });
+  return new ClaudeCodeAdapter({ client, ids, logger });
 }
