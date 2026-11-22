@@ -13,8 +13,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      "/api": backendUrl,
-      "/ws": { target: backendUrl, ws: true },
+      "^/api/": backendUrl,
+      "^/ws(\\?|$)": { target: backendUrl, ws: true },
     },
   },
 });
