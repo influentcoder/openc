@@ -1,7 +1,11 @@
 export class AsyncQueue<Item> implements AsyncIterable<Item> {
   private readonly buffered: Item[] = [];
-  private readonly waiting: ((result: IteratorResult<Item>) => void)[] = [];
+  private readonly waiting: {
+    resolve: (result: IteratorResult<Item>) => void;
+    reject: (error: Error) => void;
+  }[] = [];
   private closed = false;
+  private failure: Error | null = null;
 
   push(item: Item): void {
     if (this.closed) {
@@ -9,7 +13,7 @@ export class AsyncQueue<Item> implements AsyncIterable<Item> {
     }
     const waiter = this.waiting.shift();
     if (waiter) {
-      waiter({ value: item, done: false });
+      waiter.resolve({ value: item, done: false });
       return;
     }
     this.buffered.push(item);
@@ -18,7 +22,15 @@ export class AsyncQueue<Item> implements AsyncIterable<Item> {
   close(): void {
     this.closed = true;
     for (const waiter of this.waiting.splice(0)) {
-      waiter({ value: undefined, done: true });
+      waiter.resolve({ value: undefined, done: true });
+    }
+  }
+
+  fail(error: Error): void {
+    this.closed = true;
+    this.failure = error;
+    for (const waiter of this.waiting.splice(0)) {
+      waiter.reject(error);
     }
   }
 
@@ -35,9 +47,12 @@ export class AsyncQueue<Item> implements AsyncIterable<Item> {
     if (item !== undefined) {
       return Promise.resolve({ value: item, done: false });
     }
+    if (this.failure) {
+      return Promise.reject(this.failure);
+    }
     if (this.closed) {
       return Promise.resolve({ value: undefined, done: true });
     }
-    return new Promise((resolve) => this.waiting.push(resolve));
+    return new Promise((resolve, reject) => this.waiting.push({ resolve, reject }));
   }
 }

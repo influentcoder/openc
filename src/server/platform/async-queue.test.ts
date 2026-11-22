@@ -24,4 +24,20 @@ describe("AsyncQueue", () => {
     queue.close();
     expect(() => queue.push(1)).toThrow("closed queue");
   });
+
+  it("delivers buffered items, then rejects with the failure", async () => {
+    const queue = new AsyncQueue<number>();
+    queue.push(1);
+    queue.fail(new Error("process crashed"));
+    const iterator = queue[Symbol.asyncIterator]();
+    expect(await iterator.next()).toEqual({ value: 1, done: false });
+    await expect(iterator.next()).rejects.toThrow("process crashed");
+  });
+
+  it("rejects a consumer that is already waiting when the queue fails", async () => {
+    const queue = new AsyncQueue<number>();
+    const pending = queue[Symbol.asyncIterator]().next();
+    queue.fail(new Error("process crashed"));
+    await expect(pending).rejects.toThrow("process crashed");
+  });
 });
