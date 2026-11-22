@@ -1,9 +1,16 @@
-# openc — Requirements (v0.2)
+# openc — Requirements (v0.3)
 
-openc is a local web app for running AI coding sessions on top of existing
-agent harnesses (Claude Code first, then Codex, Pi, …). openc owns the UI,
-sessions, history and workspaces; the underlying harness owns the agent loop,
-tools and authentication.
+openc is a local **orchestrator of agent harnesses** (Claude Code first, then
+Codex, Pi, …), with a web UI. It is not a harness itself: openc owns sessions,
+workspaces, history, triggers (watchers) and notifications; the underlying
+harness owns the agent loop, tools and authentication.
+
+```
+UI (web)                 sidebar · chat · diff pane · inbox · watchers
+Orchestration layer      watchers/triggers · inbox · notifications · openc tools for agents
+Session layer            lifecycle · workspaces (worktree/dir/scratch) · snapshots · history
+Harness layer            adapters: Claude Code · Codex · Pi
+```
 
 Status: agreed draft. IDs (`R-…`) are stable so code, tests and issues can
 reference them.
@@ -17,6 +24,9 @@ reference them.
 - Run many sessions in parallel, isolated in git worktrees when wanted.
 - One unified, searchable history across all backends.
 - First-class review of the changes an agent makes.
+- Long-lived sessions that can be resumed at any time, even months later.
+- Automate follow-up work with **watchers**: e.g. a session wakes itself up
+  when its PR's CI fails or receives review comments.
 
 **Non-goals (for now)**
 - Multi-user or hosted deployment. Single user, single machine.
@@ -93,8 +103,8 @@ reference them.
 - **R-SES-8** Sessions can be renamed, resumed and deleted. Titles are
   auto-generated from the first message and editable.
 - **R-SES-9** Multiple sessions run in parallel. A configurable limit on
-  concurrently *running* agent processes (default 6); idle sessions release
-  their process and are resumed on the next message.
+  concurrently *live* agent processes (default 6). When the limit is hit, the
+  least recently used idle process is released first.
 - **R-SES-10** Status per session: `idle`, `running`, `waiting` (needs user
   input), `done`, `error`. Shown in the sidebar.
 - **R-SES-11** Browser notification when a session finishes or needs input while
@@ -105,6 +115,41 @@ reference them.
   are deleted too. "This directory" folders are never deleted.
 - **R-SES-13** A session's backend is fixed at creation. The model can be changed
   mid-session when the backend supports it.
+
+### 4.4 Process release, resume and retention
+- **R-SES-14** An openc session (metadata, event log, workspace) is permanent until
+  deleted; the backend process is transient. Viewing a session never requires
+  its process: transcript and diffs come from openc's own storage.
+- **R-SES-15** A live process is released after **10 minutes idle**, but never while
+  the session is open on screen or has a pending trigger.
+- **R-SES-16** Sending a message (or a watcher firing, §9) on a released session
+  respawns the backend transparently with the same cwd and resumes the
+  conversation (UI shows a brief `resuming` state). Server restarts use the
+  same path.
+- **R-SES-17** Resume must work regardless of session age: openc keeps its own
+  copy of the backend transcript (Claude Code deletes local transcripts after
+  `cleanupPeriodDays`, default 30). If native resume is impossible, openc
+  starts a new backend session seeded with a summary of its own history and
+  marks it in the transcript ("context rebuilt").
+- **R-SES-18** On resume, if the workspace changed since the end of the last turn
+  (other edits, base branch moved), openc prepends a short note to the next
+  message listing changed files. For worktrees, offer to rebase on the base
+  branch when it moved.
+- **R-SES-19** If a session's worktree is missing on resume, offer to recreate it
+  from the session branch, or continue without it.
+- **R-SES-20** When resuming a large context after the prompt cache likely expired,
+  show a hint with the approximate context size (it counts against plan usage).
+
+### 4.5 Archive
+- **R-SES-21** Sessions can be **archived**: hidden from the sidebar, still in
+  History and search, workspace kept. Un-archive at any time.
+- **R-SES-22** Auto-archive sessions with no activity for N days (default 14,
+  configurable, can be disabled). Watched sessions (§9) are never
+  auto-archived while their watcher is active. Sessions whose PR got merged
+  or closed are auto-archived.
+- **R-SES-23** Archive view shows per-session disk usage and offers to clean up
+  worktrees whose branch is merged into the base branch. Nothing is deleted
+  without explicit user action.
 
 ## 5. Chat
 
@@ -176,7 +221,88 @@ reference them.
   native configuration unchanged (user + project settings are loaded).
   An openc-level shared MCP config is a later feature.
 
-## 9. Constraints and risks
+## 9. Watchers (draft)
+
+A **watcher** connects an external source of events to a session. When it
+fires, openc wakes the session (respawning it if needed) with a prompt built
+from the event, and the agent works on it unattended.
+
+```
+Source ──events──► Watcher (filter · batch · policy) ──► Action
+GitHub PR                                              resume session with prompt
+file system                                            create a new session
+Telegram (later)                                       notify the user
+schedule (later)
+```
+
+### 9.1 General
+- **R-W-1** Watchers are attached to a session (or, for sources like Telegram, to a
+  project with a "create new session" action). They are listed and can be
+  paused/removed from the session header and a global Watchers view.
+- **R-W-2** **Batching**: events are debounced and grouped so one wake-up handles
+  them together (e.g. all review comments of one review; CI only after all
+  checks completed).
+- **R-W-3** **Busy sessions**: if the session is running or the user is mid-
+  conversation, the trigger is queued and shown as a pending chip; it runs
+  when the session becomes idle (the user can run or dismiss it earlier).
+- **R-W-4** **Loop guards**: max automatic attempts per watcher per problem
+  (default 3, e.g. the same failing check), per-watcher daily cap, and
+  automatic pause when the same failure repeats unchanged. Hitting a guard
+  escalates to the user.
+- **R-W-5** **Outcome reporting**: each triggered turn ends with a structured
+  outcome reported by the agent through an openc tool (§9.3): `resolved`,
+  `needs_user` (with the list of pending items), or `failed`. `needs_user`
+  and `failed` put the session in `waiting` and notify the user.
+- **R-W-6** **Inbox**: a "Needs you" view listing every session waiting on the
+  user, with the pending items and a link to the cause (comment, CI run).
+- **R-W-7** **Catch-up**: watchers keep a cursor; after downtime they process what
+  happened while openc was stopped (with batching, not one wake per event).
+- **R-W-8** Triggered turns are clearly marked in the transcript (source, event,
+  link), distinct from user messages.
+
+### 9.2 GitHub PR watcher (first source)
+- **R-W-GH-1** A PR can be linked to a session: automatically when openc opens the
+  PR (R-DIFF-4) or when a PR's head is the session branch; manually ("watch
+  PR #123 / URL"); or by the agent itself via an openc tool.
+- **R-W-GH-2** Events handled:
+  - **CI failure** (all checks completed, at least one failed): agent gets the
+    failing checks and log excerpts, fixes, commits and pushes, then the
+    watcher waits for the new CI run.
+  - **Review / PR comments**: agent addresses each comment (code change and/or
+    reply on GitHub); anything it can't or shouldn't decide alone is reported
+    as `needs_user`.
+  - **Merge conflict** with the base branch: agent rebases/merges and pushes,
+    or escalates.
+  - **PR merged or closed**: watcher stops, session auto-archived.
+- **R-W-GH-3** **Author allow-list**: only comments from allowed authors trigger work
+  (default: the user themself and repo collaborators with write access).
+  Others are shown in the session but never sent to the agent automatically.
+- **R-W-GH-4** All GitHub content is passed to the agent as clearly delimited
+  untrusted data, never as instructions from the user.
+- **R-W-GH-5** Push policy for triggered turns: push only to the session branch,
+  never force-push, never merge the PR.
+- **R-W-GH-6** Ignore events caused by the session itself (its own pushes and
+  comments; openc tags comments it posts and tracks their ids).
+- **R-W-GH-7** Uses the user's local `gh` authentication. Transport: polling (see
+  ARCHITECTURE §8); no public endpoint required.
+
+### 9.3 openc tools for agents
+openc exposes a small tool set to every session (as an MCP server, so it works
+across backends):
+- `openc_report_outcome(status, summary, pending_items[])` — see R-W-5.
+- `openc_watch_pr(pr)` / `openc_unwatch(…)` — the agent subscribes after opening a PR.
+- `openc_notify_user(message)` — ask for attention without ending the turn.
+
+### 9.4 Later sources
+- **File watcher** (path globs → prompt), **schedule** (cron → prompt),
+  **Telegram** (as a source: message → new or existing session; and as a
+  notification channel for "needs you" while away), generic incoming webhook.
+
+### 9.5 Notifications
+- **R-N-1** Browser notifications (MVP). A notification-channel abstraction so
+  Telegram / ntfy / email can be added for when the user is away.
+
+## 10. Constraints and risks
 
 - **Subscription terms.** openc drives the user's own installed CLIs with the
   user's own login, for personal use. Anthropic does not allow third-party
@@ -189,15 +315,24 @@ reference them.
 - **Harness churn.** The Agent SDK and Codex protocols change often; adapters must
   isolate this and keep raw events so the UI degrades gracefully on unknown
   event types.
+- **Prompt injection via watchers.** Triggered sessions run in never-ask mode and
+  read external content (PR comments, CI logs, later Telegram). Mitigated by
+  the author allow-list, untrusted-data framing, branch-only push policy and
+  loop guards (R-W-*), but it remains the main risk of unattended operation.
+- **Watchers need the server running.** Run openc as a `systemd --user` service
+  (works on WSL with systemd enabled); catch-up covers downtime.
+- **Unattended usage.** Auto-fix loops consume plan usage/credits; loop guards
+  and daily caps bound it.
 
-## 10. Milestones
+## 11. Milestones
 
 | # | Scope |
 |---|---|
-| M0 | Spike: Agent SDK with subscription auth, streaming, interrupt, resume, bypass mode, model list. Confirm worktree + snapshot approach. |
-| M1 | Skeleton: server, web UI, sidebar, chat with Claude Code, persistence, folder picker, scratch sessions. |
-| M2 | Worktrees, parallel sessions, status badges, notifications, delete with warnings. |
+| M0 | Spike: Agent SDK with subscription auth, streaming, interrupt, resume (incl. `sessionStore`), bypass mode, model list. Confirm worktree + snapshot approach. |
+| M1 | Skeleton: server, web UI, sidebar, chat with Claude Code, persistence, folder picker, scratch sessions, release/resume. |
+| M2 | Worktrees, parallel sessions, status badges, notifications, delete with warnings, archive. |
 | M3 | Diff pane: session/last-turn views, line comments, commit/revert/merge/PR/discard. |
-| M4 | History view + search, usage display, images, plan mode/to-dos/subagents rendering, slash commands. |
-| M5 | Codex adapter. |
-| Later | Pi adapter, shared MCP config, remote access (e.g. Tailscale), macOS. |
+| M4 | Watchers: framework, GitHub PR watcher, openc tools for agents, inbox. |
+| M5 | History view + search, usage display, images, plan mode/to-dos/subagents rendering, slash commands. |
+| M6 | Codex adapter. |
+| Later | File/schedule/Telegram watchers, Telegram notifications, Pi adapter, shared MCP config, remote access (e.g. Tailscale), macOS. |

@@ -1,7 +1,10 @@
-# openc — Architecture (v0.1)
+# openc — Architecture (v0.2)
 
 Companion to `REQUIREMENTS.md`. Describes the stack, process model, backend
-adapter interface, event model, storage, and how workspaces and diffs work.
+adapter interface, event model, storage, workspaces and diffs, and watchers.
+
+openc is an orchestrator: it never runs an agent loop itself. Everything that
+talks to a model goes through a backend adapter.
 
 ## 1. Stack
 
@@ -39,6 +42,9 @@ openc/
         claude-code/   # Agent SDK adapter
         fake/          # deterministic scripted backend for tests
       workspace/       # worktrees, scratch dirs, snapshots, diffs
+      watchers/        # trigger engine + sources (github, fs, schedule, telegram)
+      agent-tools/     # openc MCP tools exposed to sessions
+      notify/          # notification channels (browser, later telegram/ntfy)
       db/              # drizzle schema, migrations, queries
     web/               # React app
   tests/e2e/
@@ -62,11 +68,35 @@ Browser ──WS/REST──► openc server (Node) ──► Claude Agent SDK �
 - `SessionManager` holds a `SessionRuntime` per *active* session. A runtime
   wraps one `BackendSession` and pipes its events into the store and the
   WS hub.
-- A scheduler enforces the running-session limit (R-SES-9). Idle sessions are
-  closed after a timeout and resumed on demand using the backend's session id
-  (`resume` in the Agent SDK).
+- A scheduler enforces the live-process limit (R-SES-9, LRU eviction of idle
+  processes) and the 10-minute idle release (R-SES-15).
+- Session states vs. process states:
+
+```
+           send / trigger                 turn ends
+ released ───────────────► starting ──► running ───► idle(live)
+    ▲        (resume)                       ▲           │
+    │                                       └── send ───┤
+    └──────────── idle 10 min / LRU eviction ───────────┘
+```
+
+- **Resume path** (R-SES-16/17), used for user messages, watcher triggers and
+  server restarts:
+  1. Check workspace exists (R-SES-19); compute "changed since last turn" note
+     from snapshots (R-SES-18).
+  2. `adapter.resume({ backendSessionId, cwd, … })`.
+  3. If native resume fails → start a fresh backend session seeded with a
+     summary generated from openc's event log; record `context.rebuilt`.
+- **Transcript retention**: the Claude Code adapter passes the SDK's
+  `sessionStore` option (alpha) backed by SQLite, so Claude transcripts are
+  mirrored into openc and resume loads from there, independent of Claude
+  Code's `cleanupPeriodDays`. Fallback if that API is unsuitable: copy the
+  transcript JSONL into `~/.openc/transcripts/` after each turn and restore it
+  before resume.
 - On server restart, sessions that were running are marked `error`
   ("interrupted by restart") and can be resumed.
+- openc should run as a `systemd --user` service so watchers keep working;
+  `openc install-service` generates the unit.
 
 ## 3. Backend adapter interface
 
@@ -135,6 +165,8 @@ export type PermissionMode = 'never-ask' | 'ask-edits' | 'ask-all' | 'plan';
   permission prompts when not in bypass mode.
 - `interrupt()`, `setModel()`, `setPermissionMode()`, `supportedModels()`,
   `supportedCommands()`, `accountInfo()` (subscription type) map directly.
+- openc agent tools (§8.4) are attached via `mcpServers` using an in-process
+  server from `createSdkMcpServer()`.
 - Auth: no API key is passed; the CLI uses the user's existing login
   (`claude /login`) or `ANTHROPIC_API_KEY` if set. `status()` reports which.
 - Translates SDK messages (`assistant`, `stream_event`, `user` tool results,
@@ -194,7 +226,11 @@ SQLite at `~/.openc/openc.db`. Main tables:
 | Table | Content |
 |---|---|
 | `projects` | folder path, is_git, display name, last used |
-| `sessions` | id, project_id (nullable), title, backend, model, workspace_mode (`directory`/`worktree`/`scratch`), cwd, branch, base_ref, backend_session_id, status, permission_mode, timestamps |
+| `sessions` | id, project_id (nullable), title, backend, model, workspace_mode (`directory`/`worktree`/`scratch`), cwd, branch, base_ref, backend_session_id, status, permission_mode, archived_at, last_activity_at, timestamps |
+| `backend_transcripts` | session_id, backend, entry uuid, json — mirror of the backend transcript (`sessionStore`) |
+| `watchers` | id, session_id or project_id, source (`github-pr`, `fs`, …), config json, policy json, state (`active`/`paused`/`stopped`), cursor json |
+| `triggers` | id, watcher_id, session_id, batched event refs, status (`queued`/`running`/`done`/`dismissed`), turn_id, outcome (`resolved`/`needs_user`/`failed`), pending_items json |
+| `source_events` | id, watcher_id, external id (dedup), kind, json, received_at |
 | `turns` | id, session_id, index, started/ended, start_snapshot, end_snapshot |
 | `events` | session_id, seq, ts, type, json |
 | `raw_events` | id, session_id, backend, json |
@@ -244,12 +280,91 @@ recomputation and a `diff.changed` notification to subscribed clients.
   (configurable allow-list).
 - Never run as root (refuse to start).
 
-## 8. Open technical questions (resolve in M0)
+## 8. Watchers
+
+### 8.1 Components
+
+```
+WatcherSource ──SourceEvent──► TriggerEngine ──► SessionManager.trigger(session, prompt)
+ (github-pr, fs,                (filter, dedup,        │
+  schedule, telegram)            batch, policy,        ▼
+                                 loop guards)     agent turn ──► openc_report_outcome
+                                                                   │
+                                          Inbox / notifications ◄──┘ (needs_user, failed)
+```
+
+```ts
+interface WatcherSource<Config> {
+  readonly kind: string;                       // 'github-pr' | 'fs' | 'schedule' | 'telegram'
+  configSchema: z.ZodType<Config>;
+  start(ctx: { config: Config; cursor: unknown;
+               emit(e: SourceEvent): void;
+               saveCursor(c: unknown): void }): Promise<{ stop(): Promise<void> }>;
+}
+
+interface SourceEvent {
+  externalId: string;           // dedup key
+  kind: string;                 // e.g. 'ci.failed', 'review.submitted', 'comment.created'
+  author?: string;
+  batchKey: string;             // events with the same key are batched together
+  readyAt?: Date;               // e.g. CI: only when all checks completed
+  payload: unknown;             // untrusted
+  links: { label: string; url: string }[];
+}
+```
+
+- **TriggerEngine** persists events (`source_events`), applies filters
+  (author allow-list, ignore own actions), debounces per `batchKey`, applies
+  loop guards (attempts per failure signature, daily cap), then creates a
+  `trigger`. If the session is busy the trigger is queued (R-W-3).
+- A trigger's prompt is rendered from a per-source template: short
+  instructions from openc + the event payload wrapped in an explicit
+  `<untrusted_external_data>` block + the expected outcome contract.
+- Triggered turns run with the session's permission mode plus extra
+  constraints from the watcher policy (e.g. a `PreToolUse` hook / `canUseTool`
+  rule blocking `git push --force` and pushes to other branches).
+
+### 8.2 GitHub PR source
+- Uses the user's `gh` CLI auth (`gh api`), no token handling in openc.
+- **Polling**, not webhooks: openc is localhost-only, and polling needs no
+  tunnel. One poller per repo batches all watched PRs; conditional requests
+  (`ETag` / `If-None-Match`) so unchanged polls don't count against the rate
+  limit. Interval 30–60 s while CI is running, slower otherwise.
+- Reads: PR state/mergeability, check runs + workflow runs for the head SHA,
+  reviews, review comments, issue comments. Failing job logs are fetched and
+  trimmed to the relevant part before being given to the agent.
+- Own actions are recognised by the commit SHAs the session pushed and by a
+  hidden marker in comments openc/the agent posts.
+- Optional later: webhook delivery through a relay (e.g. `gh webhook forward`)
+  for lower latency.
+
+### 8.3 Inbox and notifications
+- The inbox is a query over sessions in `waiting` plus open triggers with
+  outcome `needs_user`/`failed`.
+- `NotificationChannel` interface (`browser` in MVP; `telegram`, `ntfy` later),
+  with per-channel rules (e.g. only when no browser tab is focused).
+
+### 8.4 openc agent tools
+An MCP server exposed to every session (in-process for the Agent SDK; stdio
+server for other backends):
+
+| Tool | Purpose |
+|---|---|
+| `openc_report_outcome(status, summary, pending_items[])` | Ends a triggered turn with a machine-readable outcome |
+| `openc_watch_pr(pr?)` | Link + watch a PR (defaults to the PR for the session branch) |
+| `openc_unwatch(watcher_id)` | Stop a watcher |
+| `openc_notify_user(message)` | Ask for attention without stopping |
+
+If a triggered turn ends without calling `openc_report_outcome`, the outcome
+is `needs_user` with the agent's last message as summary.
+
+## 9. Open technical questions (resolve in M0)
 
 1. Does the Agent SDK's bundled CLI pick up the user's existing `claude` login
    (subscription) in all cases, including WSL? Fallback: point
    `pathToClaudeCodeExecutable` at the user's installed `claude`.
 2. Exact mapping of SDK message types → `HarnessEvent` (especially subagent and
    task events, plan mode approval flow).
-3. Memory/CPU per idle Claude Code process → tune the running-session limit.
-4. Codex: `app-server` protocol vs. ACP adapter — decide at M5.
+3. Memory/CPU per idle Claude Code process → tune the live-process limit.
+4. Is the alpha `sessionStore` stable enough, or use the JSONL-copy fallback?
+5. Codex: `app-server` protocol vs. ACP adapter — decide at M6.
