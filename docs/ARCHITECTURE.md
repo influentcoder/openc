@@ -1,7 +1,8 @@
-# openc — Architecture (v0.2)
+# openc — Architecture (v0.3)
 
 Companion to `REQUIREMENTS.md`. Describes the stack, process model, backend
-adapter interface, event model, storage, workspaces and diffs, and watchers.
+adapter interface, event model, storage, workspaces and diffs, watchers and
+testability.
 
 openc is an orchestrator: it never runs an agent loop itself. Everything that
 talks to a model goes through a backend adapter.
@@ -24,7 +25,10 @@ can work on it reliably.
 | Diff view | Monaco diff editor (`@monaco-editor/react`) | Mature side-by-side/inline diffs |
 | Git | `git` CLI via `execa` (no libgit2) | Exact behaviour of the user's git; worktrees supported |
 | Lint/format | Biome | One fast tool |
-| Tests | Vitest (unit/integration), Playwright (e2e) | Standard |
+| Boundaries | dependency-cruiser | Enforces import rules between layers |
+| Logging | pino (structured JSON) | Searchable logs with session/turn ids |
+| Git hooks | lefthook | Fast checks before commit |
+| Tests | Vitest (unit/integration/contract), Playwright (e2e) | Standard |
 
 Single package (no monorepo tooling) to keep things simple:
 
@@ -358,7 +362,31 @@ server for other backends):
 If a triggered turn ends without calling `openc_report_outcome`, the outcome
 is `needs_user` with the agent's last message as summary.
 
-## 9. Open technical questions (resolve in M0)
+## 9. Testability
+
+Every external dependency is a port (interface) with a real and a fake
+adapter, chosen in a single composition root (`src/server/composition.ts`).
+`pnpm dev:fake` and all automated tests use the fakes.
+
+| Port | Real | Fake | Fidelity source |
+|---|---|---|---|
+| `BackendAdapter` | Claude Agent SDK (later Codex, Pi) | replays recorded SDK message streams, scripted per scenario | recorded real sessions in `fixtures/claude-code/` |
+| `GitHubClient` | `gh api` | in-memory GitHub (PRs, checks, reviews, comments, ETags) | recorded API responses in `fixtures/github/` |
+| `Clock` | system time | manually advanced clock | n/a |
+| `ProcessSpawner` | `execa` | scripted processes | n/a |
+| `NotificationChannel` | browser push | in-memory recorder | n/a |
+| `FileWatcher` | chokidar | event emitter driven by tests | n/a |
+| `IdGenerator` | random UUIDs | sequential ids | n/a |
+
+Not faked: git and SQLite (real, in temporary directories).
+
+**Contract tests**: each port has one shared suite
+(`<port>.contract.ts`) that runs against the fake in `pnpm check` and against
+the real adapter in `pnpm test:contract:live`. A fixture-recording mode on the
+real adapters captures new fixtures (scrubbed of tokens and personal data)
+when behaviour upstream changes.
+
+## 10. Open technical questions (resolve in M0)
 
 1. Does the Agent SDK's bundled CLI pick up the user's existing `claude` login
    (subscription) in all cases, including WSL? Fallback: point

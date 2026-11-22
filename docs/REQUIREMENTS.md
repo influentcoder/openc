@@ -293,14 +293,20 @@ across backends):
 - `openc_watch_pr(pr)` / `openc_unwatch(…)` — the agent subscribes after opening a PR.
 - `openc_notify_user(message)` — ask for attention without ending the turn.
 
-### 9.4 Later sources
-- **File watcher** (path globs → prompt), **schedule** (cron → prompt),
-  **Telegram** (as a source: message → new or existing session; and as a
-  notification channel for "needs you" while away), generic incoming webhook.
+### 9.4 Other sources
+Watchers are a first-class, generic concept: any source that can emit events
+plugs into the same engine, policies, inbox and UI. The GitHub PR source is
+only the first. Examples of possible later sources (none committed yet):
+file watcher (path globs → prompt), schedule (cron → prompt), chat channels
+such as Telegram (message → new or existing session), generic incoming
+webhook.
+
+- **R-W-9** Adding a source requires only implementing the source interface and
+  a prompt template; no changes to the engine, storage or UI.
 
 ### 9.5 Notifications
 - **R-N-1** Browser notifications (MVP). A notification-channel abstraction so
-  Telegram / ntfy / email can be added for when the user is away.
+  other channels (e.g. ntfy, email, chat apps) can be added later.
 
 ## 10. Constraints and risks
 
@@ -335,4 +341,4 @@ across backends):
 | M4 | Watchers: framework, GitHub PR watcher, openc tools for agents, inbox. |
 | M5 | History view + search, usage display, images, plan mode/to-dos/subagents rendering, slash commands. |
 | M6 | Codex adapter. |
-| Later | File/schedule/Telegram watchers, Telegram notifications, Pi adapter, shared MCP config, remote access (e.g. Tailscale), macOS. |
+| Later | More watcher sources and notification channels as needed, Pi adapter, shared MCP config, remote access (e.g. Tailscale), macOS. |
