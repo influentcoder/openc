@@ -18,12 +18,13 @@
     "format": "biome check --write .",
     "rules": "node scripts/check-code-rules.ts",
     "boundaries": "depcruise src --config .dependency-cruiser.cjs",
-    "test": "vitest run",
+    "test": "vitest run --project server --project web",
     "test:watch": "vitest",
     "check": "pnpm typecheck && pnpm lint && pnpm rules && pnpm boundaries && pnpm test",
     "e2e": "pnpm build && playwright test --trace off",
     "db:generate": "drizzle-kit generate",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "test:contract:live": "vitest run --project live --passWithNoTests"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

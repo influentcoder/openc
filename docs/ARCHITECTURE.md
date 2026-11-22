@@ -15,13 +15,13 @@ can work on it reliably.
 | Concern                   | Choice                                                     | Why                                                        |
 | ------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
 | Language                  | TypeScript (strict) everywhere                             | One language; Agent SDK, Codex and Pi tooling are TS-first |
-| Runtime                   | Node 22 LTS                                                | What the Agent SDK and Codex are tested on                 |
+| Runtime                   | Node 22.18+, running `.ts` directly (decision 0001)        | No server build step; what the Agent SDK is tested on      |
 | Package manager           | pnpm                                                       | Fast, strict, common                                       |
 | Server                    | Hono on `@hono/node-server` + `ws`                         | Small, typed, standard                                     |
 | Validation / shared types | Zod schemas in `src/shared`                                | Runtime-checked protocol shared by server and web          |
 | Database                  | SQLite via `better-sqlite3` + Drizzle ORM, FTS5 for search | Single file, synchronous, no server                        |
-| Frontend                  | React + Vite + Tailwind + shadcn/ui                        | Most widely known stack                                    |
-| Client state              | Zustand (UI state) + TanStack Query (REST data)            | Simple, well known                                         |
+| Frontend                  | React + Vite + Tailwind                                    | Most widely known stack                                    |
+| Client state              | TanStack Query + React state                               | Simple, well known                                         |
 | Diff view                 | Monaco diff editor (`@monaco-editor/react`)                | Mature side-by-side/inline diffs                           |
 | Git                       | `git` CLI via `execa` (no libgit2)                         | Exact behaviour of the user's git; worktrees supported     |
 | Lint/format               | Biome                                                      | One fast tool                                              |
@@ -30,34 +30,49 @@ can work on it reliably.
 | Git hooks                 | lefthook                                                   | Fast checks before commit                                  |
 | Tests                     | Vitest (unit/integration/contract), Playwright (e2e)       | Standard                                                   |
 
-Single package (no monorepo tooling) to keep things simple:
+Single package (no monorepo tooling) to keep things simple. Folders marked
+_(planned)_ do not exist yet.
 
 ```
 openc/
   src/
-    shared/            # zod schemas: events, REST/WS protocol, domain types
+    shared/              # zod schemas: ids, sessions, events, REST + live protocol
     server/
-      index.ts         # entry: start server, print URL with token
-      api/             # REST routes
-      ws/              # websocket hub
-      sessions/        # SessionManager, session runtime, scheduler
+      main.ts            # entry: parse args, compose, start, print URL with token
+      server.ts          # http server + websocket upgrade
+      composition.ts     # the only place that wires real or fake dependencies
+      config.ts
+      http/              # Hono routes, access guard, error mapping
+      live/              # websocket hub (subscriptions, backlog replay, viewers)
+      sessions/          # SessionManager, LiveProcesses, event log, repository
       backends/
-        types.ts       # BackendAdapter interface
-        claude-code/   # Agent SDK adapter
-        fake/          # deterministic scripted backend for tests
-      workspace/       # worktrees, scratch dirs, snapshots, diffs
-      watchers/        # trigger engine + sources (github, fs, schedule, telegram)
-      agent-tools/     # openc MCP tools exposed to sessions
-      notify/          # notification channels (browser, later telegram/ntfy)
-      db/              # drizzle schema, migrations, queries
-    web/               # React app
-  tests/e2e/
-  docs/
-  AGENTS.md            # commands + conventions for coding agents (CLAUDE.md symlinks to it)
+        backend-adapter.ts          # BackendAdapter interface
+        backend-adapter.contract.ts # contract suite for every adapter
+        fake/            # scripted backend for tests and dev:fake
+        claude-code/     # (planned) Agent SDK adapter
+      workspace/         # scratch dirs, directory browser; (planned) worktrees, snapshots
+      settings/          # key/value settings, new-session defaults
+      platform/          # clock, ids, logger, async queue
+      testing/           # fake clock, test harnesses (test-only, enforced)
+      db/                # drizzle schema + migrations
+      watchers/          # (planned) trigger engine + sources
+      agent-tools/       # (planned) openc MCP tools exposed to sessions
+      notify/            # (planned) notification channels
+    web/
+      api/               # HTTP client, live websocket connection, token
+      app/               # App shell, services context, hash routing
+      sessions/          # sidebar
+      chat/              # transcript model + views, composer
+      new-session/       # dialog, folder picker, form logic
+      testing/           # fakes of the API and live connection
+  scripts/               # dev runner, code-rules checker
+  tests/e2e/             # Playwright, against the app on fakes
+  docs/                  # requirements, architecture, decisions/
+  AGENTS.md              # rules for agents (CLAUDE.md links to it)
 ```
 
-One command each for agents: `pnpm dev`, `pnpm check` (typecheck + lint +
-unit tests), `pnpm e2e`.
+Commands: `pnpm dev`, `pnpm dev:fake`, `pnpm check`, `pnpm e2e`,
+`pnpm test:contract:live` (see AGENTS.md).
 
 ## 2. Process model
 
@@ -104,7 +119,9 @@ Browser ──WS/REST──► openc server (Node) ──► Claude Agent SDK �
 
 ## 3. Backend adapter interface
 
-The core only talks to this interface. It is designed against Claude Code
+The core only talks to this interface. **Implemented so far** is the subset in
+`src/server/backends/backend-adapter.ts` (text messages, streaming, tools,
+usage, interrupt, resume); the sketch below is the target. It is designed against Claude Code
 (Agent SDK), Codex (`codex app-server`, JSON-RPC) and Pi (RPC mode). Concepts
 are close to the Agent Client Protocol (ACP) so an ACP-based adapter stays
 possible, but we do not depend on ACP: the Agent SDK exposes more (usage,
@@ -179,13 +196,19 @@ export type PermissionMode = "never-ask" | "ask-edits" | "ask-all" | "plan";
 
 ### Fake adapter
 
-Replays scripted event sequences from fixtures. Used by unit, integration and
-e2e tests so the full app can be tested without network or credentials.
+Scripted, deterministic backend (`backends/fake/`): replies `Echo #n: <text>`
+where `n` counts messages in the backend conversation (so resume is
+observable), runs a fake `ls` tool when the message contains "tool", streams
+slowly with "slow", and fails with "fail". Once the Claude Code adapter
+exists, the fake will also replay recorded real sessions from `fixtures/`.
 
 ## 4. Event model
 
 Every session has an append-only event log; each event has a per-session
-monotonically increasing `seq`.
+monotonically increasing `seq`. `src/shared/events.ts` is the source of truth;
+implemented today: `turn.started`, `assistant.message`, `tool.started`,
+`tool.completed`, `usage`, `turn.completed`, `backend.started` (with
+`resumed`), `context.rebuilt`. The sketch below is the target.
 
 ```ts
 type HarnessEvent =
@@ -235,15 +258,21 @@ type HarnessEvent =
 
 ### Client sync
 
-- WS messages: `subscribe {sessionId, sinceSeq}` → server sends backlog from
-  SQLite then live events. Sidebar subscribes to a lightweight `sessions`
-  channel (status/title/activity changes).
+- One WebSocket per browser at `/ws?token=…` (`src/shared/live-protocol.ts`).
+  Client → server: `subscribe {sessionId, sinceSeq}` (server replays the
+  backlog from SQLite, then streams live) and `unsubscribe`. Server → client:
+  `session.event`, `session.delta` (only to subscribers of that session) and
+  `session.updated` / `session.deleted` (to everyone, for the sidebar).
+- A subscribed client counts as a viewer of the session (R-SES-15).
+- On reconnect the client re-subscribes with the last `seq` it saw.
 - Commands from the client (send, interrupt, permission response, …) go over
   REST; results arrive as events. This keeps one source of truth.
 
 ## 5. Storage
 
-SQLite at `~/.openc/openc.db`. Main tables:
+SQLite at `~/.openc/openc.db`, migrations generated by drizzle-kit
+(`pnpm db:generate`). Implemented today: `sessions`, `events`, `settings`.
+Target tables:
 
 | Table                 | Content                                                                                                                                                                                                            |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

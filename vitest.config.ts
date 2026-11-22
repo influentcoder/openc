@@ -9,6 +9,15 @@ export default defineConfig({
           name: "server",
           environment: "node",
           include: ["src/server/**/*.test.ts", "src/shared/**/*.test.ts", "scripts/**/*.test.ts"],
+          exclude: ["**/*.live.test.ts"],
+        },
+      },
+      {
+        test: {
+          name: "live",
+          environment: "node",
+          include: ["src/server/**/*.live.test.ts"],
+          testTimeout: 120_000,
         },
       },
       {
