@@ -1,4 +1,5 @@
 import { loadOrCreateAccessToken } from "./access-token.ts";
+import { browserLink } from "./browser-link.ts";
 import { createExternalDependencies, createServices } from "./composition.ts";
 import { parseServerArguments } from "./config.ts";
 import { startServer } from "./server.ts";
@@ -10,7 +11,8 @@ const token = config.token ?? (await loadOrCreateAccessToken(config.dataDirector
 const server = await startServer(services, { ...config, token });
 
 services.logger.info({ mode: config.mode, url: server.url }, "openc is running");
-process.stdout.write(`\nOpen ${server.url}/?token=${token}\n\n`);
+const link = browserLink({ serverUrl: server.url, webUrl: config.webUrl, token });
+process.stdout.write(`\nOpen ${link}\n\n`);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {

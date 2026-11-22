@@ -13,6 +13,7 @@ export interface ServerConfig {
   dataDirectory: string;
   browseRoot: string;
   token: string | undefined;
+  webUrl: string | undefined;
   webDistDirectory: string;
   logLevel: "silent" | "info" | "debug";
 }
@@ -29,6 +30,7 @@ export function parseServerArguments(argumentList: string[]): ServerConfig {
       "data-dir": { type: "string", default: join(homedir(), ".openc") },
       "browse-root": { type: "string", default: homedir() },
       token: { type: "string" },
+      "web-url": { type: "string" },
       quiet: { type: "boolean", default: false },
     },
   });
@@ -39,6 +41,7 @@ export function parseServerArguments(argumentList: string[]): ServerConfig {
     dataDirectory: resolve(values["data-dir"]),
     browseRoot: resolve(values["browse-root"]),
     token: values.token,
+    webUrl: z.url().optional().parse(values["web-url"]),
     webDistDirectory: resolve(import.meta.dirname, "../../dist/web"),
     logLevel: values.quiet ? "silent" : "info",
   };

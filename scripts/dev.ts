@@ -24,6 +24,7 @@ const children: ChildProcess[] = [
       `--port=${defaultPort}`,
       `--data-dir=${dataDirectory}`,
       `--token=${token}`,
+      `--web-url=${webDevelopmentUrl}`,
     ],
     { cwd: repositoryRoot, stdio: "inherit" },
   ),
@@ -33,10 +34,6 @@ const children: ChildProcess[] = [
     env: { ...process.env, OPENC_SERVER_PORT: String(defaultPort) },
   }),
 ];
-
-process.stdout.write(
-  `\nopenc dev (${values.fake ? "fake" : "real"} backends): ${webDevelopmentUrl}/?token=${token}\n\n`,
-);
 
 const stopAll = () => {
   for (const child of children) {
