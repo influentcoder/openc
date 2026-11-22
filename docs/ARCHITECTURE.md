@@ -12,23 +12,23 @@ talks to a model goes through a backend adapter.
 Chosen to be boring, mainstream and strongly typed, so AI agents (and humans)
 can work on it reliably.
 
-| Concern | Choice | Why |
-|---|---|---|
-| Language | TypeScript (strict) everywhere | One language; Agent SDK, Codex and Pi tooling are TS-first |
-| Runtime | Node 22 LTS | What the Agent SDK and Codex are tested on |
-| Package manager | pnpm | Fast, strict, common |
-| Server | Hono on `@hono/node-server` + `ws` | Small, typed, standard |
-| Validation / shared types | Zod schemas in `src/shared` | Runtime-checked protocol shared by server and web |
-| Database | SQLite via `better-sqlite3` + Drizzle ORM, FTS5 for search | Single file, synchronous, no server |
-| Frontend | React + Vite + Tailwind + shadcn/ui | Most widely known stack |
-| Client state | Zustand (UI state) + TanStack Query (REST data) | Simple, well known |
-| Diff view | Monaco diff editor (`@monaco-editor/react`) | Mature side-by-side/inline diffs |
-| Git | `git` CLI via `execa` (no libgit2) | Exact behaviour of the user's git; worktrees supported |
-| Lint/format | Biome | One fast tool |
-| Boundaries | dependency-cruiser | Enforces import rules between layers |
-| Logging | pino (structured JSON) | Searchable logs with session/turn ids |
-| Git hooks | lefthook | Fast checks before commit |
-| Tests | Vitest (unit/integration/contract), Playwright (e2e) | Standard |
+| Concern                   | Choice                                                     | Why                                                        |
+| ------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| Language                  | TypeScript (strict) everywhere                             | One language; Agent SDK, Codex and Pi tooling are TS-first |
+| Runtime                   | Node 22 LTS                                                | What the Agent SDK and Codex are tested on                 |
+| Package manager           | pnpm                                                       | Fast, strict, common                                       |
+| Server                    | Hono on `@hono/node-server` + `ws`                         | Small, typed, standard                                     |
+| Validation / shared types | Zod schemas in `src/shared`                                | Runtime-checked protocol shared by server and web          |
+| Database                  | SQLite via `better-sqlite3` + Drizzle ORM, FTS5 for search | Single file, synchronous, no server                        |
+| Frontend                  | React + Vite + Tailwind + shadcn/ui                        | Most widely known stack                                    |
+| Client state              | Zustand (UI state) + TanStack Query (REST data)            | Simple, well known                                         |
+| Diff view                 | Monaco diff editor (`@monaco-editor/react`)                | Mature side-by-side/inline diffs                           |
+| Git                       | `git` CLI via `execa` (no libgit2)                         | Exact behaviour of the user's git; worktrees supported     |
+| Lint/format               | Biome                                                      | One fast tool                                              |
+| Boundaries                | dependency-cruiser                                         | Enforces import rules between layers                       |
+| Logging                   | pino (structured JSON)                                     | Searchable logs with session/turn ids                      |
+| Git hooks                 | lefthook                                                   | Fast checks before commit                                  |
+| Tests                     | Vitest (unit/integration/contract), Playwright (e2e)       | Standard                                                   |
 
 Single package (no monorepo tooling) to keep things simple:
 
@@ -69,7 +69,7 @@ Browser ──WS/REST──► openc server (Node) ──► Claude Agent SDK �
 ```
 
 - The server is the single owner of agent processes. Browsers are views.
-- `SessionManager` holds a `SessionRuntime` per *active* session. A runtime
+- `SessionManager` holds a `SessionRuntime` per _active_ session. A runtime
   wraps one `BackendSession` and pipes its events into the store and the
   WS hub.
 - A scheduler enforces the live-process limit (R-SES-9, LRU eviction of idle
@@ -113,9 +113,9 @@ rate limits, model switching, plan mode) than the ACP adapters do today.
 ```ts
 // src/server/backends/types.ts (sketch)
 export interface BackendAdapter {
-  readonly id: BackendId;                     // 'claude-code' | 'codex' | 'pi' | 'fake'
+  readonly id: BackendId; // 'claude-code' | 'codex' | 'pi' | 'fake'
   readonly displayName: string;
-  status(): Promise<BackendStatus>;           // installed, version, auth: 'subscription'|'api-key'|'none', plan
+  status(): Promise<BackendStatus>; // installed, version, auth: 'subscription'|'api-key'|'none', plan
   listModels(): Promise<ModelInfo[]>;
   capabilities(): BackendCapabilities;
   start(opts: StartOptions): Promise<BackendSession>;
@@ -123,10 +123,10 @@ export interface BackendAdapter {
 }
 
 export interface StartOptions {
-  cwd: string;                                // worktree, folder or scratch dir
+  cwd: string; // worktree, folder or scratch dir
   model?: string;
-  permissionMode: PermissionMode;             // openc-level enum, mapped per backend
-  sessionId: string;                          // openc session id (for logging)
+  permissionMode: PermissionMode; // openc-level enum, mapped per backend
+  sessionId: string; // openc session id (for logging)
 }
 export interface ResumeOptions extends StartOptions {
   backendSessionId: string;
@@ -134,8 +134,8 @@ export interface ResumeOptions extends StartOptions {
 
 export interface BackendSession {
   readonly backendSessionId: Promise<string>; // known after init
-  events(): AsyncIterable<BackendEvent>;      // normalised events + raw payload
-  send(input: UserInput): Promise<void>;      // text + images
+  events(): AsyncIterable<BackendEvent>; // normalised events + raw payload
+  send(input: UserInput): Promise<void>; // text + images
   interrupt(): Promise<void>;
   respondToPermission(requestId: string, decision: PermissionDecision): Promise<void>;
   setModel?(model: string): Promise<void>;
@@ -150,11 +150,11 @@ export interface BackendCapabilities {
   planMode: boolean;
   slashCommands: boolean;
   thinking: boolean;
-  usage: 'tokens' | 'tokens+cost' | 'none';
+  usage: "tokens" | "tokens+cost" | "none";
   rateLimits: boolean;
 }
 
-export type PermissionMode = 'never-ask' | 'ask-edits' | 'ask-all' | 'plan';
+export type PermissionMode = "never-ask" | "ask-edits" | "ask-all" | "plan";
 ```
 
 ### Claude Code adapter (MVP)
@@ -189,23 +189,41 @@ monotonically increasing `seq`.
 
 ```ts
 type HarnessEvent =
-  | { type: 'session.started'; backendSessionId: string; model: string }
-  | { type: 'turn.started'; turnId: string; input: UserInput }
-  | { type: 'assistant.delta'; turnId: string; messageId: string; text: string }
-  | { type: 'assistant.message'; turnId: string; messageId: string; content: ContentBlock[] }
-  | { type: 'thinking'; turnId: string; text: string }
-  | { type: 'tool.started'; turnId: string; toolCallId: string; name: string; input: unknown; kind: ToolKind }
-  | { type: 'tool.completed'; turnId: string; toolCallId: string; output: unknown; isError: boolean }
-  | { type: 'permission.requested'; requestId: string; toolCallId?: string; summary: string }
-  | { type: 'permission.resolved'; requestId: string; decision: PermissionDecision }
-  | { type: 'todos.updated'; items: TodoItem[] }
-  | { type: 'subagent.started' | 'subagent.completed'; id: string; description: string }
-  | { type: 'plan.proposed'; plan: string }
-  | { type: 'usage'; turnId: string; inputTokens: number; outputTokens: number; costUsd?: number }
-  | { type: 'rate-limit'; windows: RateLimitWindow[] }
-  | { type: 'turn.completed'; turnId: string; reason: 'end' | 'interrupted' | 'error'; error?: string }
-  | { type: 'status'; status: SessionStatus }
-  | { type: 'raw'; backend: BackendId; payload: unknown };   // unknown/unmapped
+  | { type: "session.started"; backendSessionId: string; model: string }
+  | { type: "turn.started"; turnId: string; input: UserInput }
+  | { type: "assistant.delta"; turnId: string; messageId: string; text: string }
+  | { type: "assistant.message"; turnId: string; messageId: string; content: ContentBlock[] }
+  | { type: "thinking"; turnId: string; text: string }
+  | {
+      type: "tool.started";
+      turnId: string;
+      toolCallId: string;
+      name: string;
+      input: unknown;
+      kind: ToolKind;
+    }
+  | {
+      type: "tool.completed";
+      turnId: string;
+      toolCallId: string;
+      output: unknown;
+      isError: boolean;
+    }
+  | { type: "permission.requested"; requestId: string; toolCallId?: string; summary: string }
+  | { type: "permission.resolved"; requestId: string; decision: PermissionDecision }
+  | { type: "todos.updated"; items: TodoItem[] }
+  | { type: "subagent.started" | "subagent.completed"; id: string; description: string }
+  | { type: "plan.proposed"; plan: string }
+  | { type: "usage"; turnId: string; inputTokens: number; outputTokens: number; costUsd?: number }
+  | { type: "rate-limit"; windows: RateLimitWindow[] }
+  | {
+      type: "turn.completed";
+      turnId: string;
+      reason: "end" | "interrupted" | "error";
+      error?: string;
+    }
+  | { type: "status"; status: SessionStatus }
+  | { type: "raw"; backend: BackendId; payload: unknown }; // unknown/unmapped
 // envelope: { sessionId, seq, ts, event, rawRef? }
 ```
 
@@ -227,24 +245,25 @@ type HarnessEvent =
 
 SQLite at `~/.openc/openc.db`. Main tables:
 
-| Table | Content |
-|---|---|
-| `projects` | folder path, is_git, display name, last used |
-| `sessions` | id, project_id (nullable), title, backend, model, workspace_mode (`directory`/`worktree`/`scratch`), cwd, branch, base_ref, backend_session_id, status, permission_mode, archived_at, last_activity_at, timestamps |
-| `backend_transcripts` | session_id, backend, entry uuid, json — mirror of the backend transcript (`sessionStore`) |
-| `watchers` | id, session_id or project_id, source (`github-pr`, `fs`, …), config json, policy json, state (`active`/`paused`/`stopped`), cursor json |
-| `triggers` | id, watcher_id, session_id, batched event refs, status (`queued`/`running`/`done`/`dismissed`), turn_id, outcome (`resolved`/`needs_user`/`failed`), pending_items json |
-| `source_events` | id, watcher_id, external id (dedup), kind, json, received_at |
-| `turns` | id, session_id, index, started/ended, start_snapshot, end_snapshot |
-| `events` | session_id, seq, ts, type, json |
-| `raw_events` | id, session_id, backend, json |
-| `diff_comments` | session_id, file, line range, text, sent_in_turn |
-| `settings` | key/value (last backend/model, last workspace mode, limits, …) |
-| `events_fts` | FTS5 index over message text and tool summaries |
+| Table                 | Content                                                                                                                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `projects`            | folder path, is_git, display name, last used                                                                                                                                                                       |
+| `sessions`            | id, project_id (nullable), title, backend, model, workspace_mode (`directory`/`worktree`/`scratch`), cwd, branch, base_ref, backend_session_id, status, permission_mode, archived_at, last_activity_at, timestamps |
+| `backend_transcripts` | session_id, backend, entry uuid, json — mirror of the backend transcript (`sessionStore`)                                                                                                                          |
+| `watchers`            | id, session_id or project_id, source (`github-pr`, `fs`, …), config json, policy json, state (`active`/`paused`/`stopped`), cursor json                                                                            |
+| `triggers`            | id, watcher_id, session_id, batched event refs, status (`queued`/`running`/`done`/`dismissed`), turn_id, outcome (`resolved`/`needs_user`/`failed`), pending_items json                                            |
+| `source_events`       | id, watcher_id, external id (dedup), kind, json, received_at                                                                                                                                                       |
+| `turns`               | id, session_id, index, started/ended, start_snapshot, end_snapshot                                                                                                                                                 |
+| `events`              | session_id, seq, ts, type, json                                                                                                                                                                                    |
+| `raw_events`          | id, session_id, backend, json                                                                                                                                                                                      |
+| `diff_comments`       | session_id, file, line range, text, sent_in_turn                                                                                                                                                                   |
+| `settings`            | key/value (last backend/model, last workspace mode, limits, …)                                                                                                                                                     |
+| `events_fts`          | FTS5 index over message text and tool summaries                                                                                                                                                                    |
 
 ## 6. Workspaces and diffs
 
 ### Worktrees
+
 - Create: `git -C <repo> worktree add -b openc/<slug> <path> <base-commit>`.
 - Delete (R-SES-12): compute warnings first (`git status --porcelain`,
   `git log <base>..openc/<slug>`), then `git worktree remove --force <path>`
@@ -254,6 +273,7 @@ SQLite at `~/.openc/openc.db`. Main tables:
 - PR: `git push -u origin openc/<slug>` then `gh pr create` if `gh` exists.
 
 ### Snapshots (for "Session" and "Last turn" diffs)
+
 Snapshots capture the full working tree, including untracked files, **without
 touching the user's index, HEAD or stash**:
 
@@ -273,6 +293,7 @@ git update-ref refs/openc/<session>/<turn> <commit-wrapping-tree>   # keep from 
 - Refs under `refs/openc/` are removed when the session is deleted.
 
 ### Live refresh
+
 A file watcher (chokidar) on the session cwd, debounced, triggers diff
 recomputation and a `diff.changed` notification to subscribed clients.
 
@@ -299,20 +320,23 @@ WatcherSource ──SourceEvent──► TriggerEngine ──► SessionManager.
 
 ```ts
 interface WatcherSource<Config> {
-  readonly kind: string;                       // 'github-pr' | 'fs' | 'schedule' | 'telegram'
+  readonly kind: string; // 'github-pr' | 'fs' | 'schedule' | 'telegram'
   configSchema: z.ZodType<Config>;
-  start(ctx: { config: Config; cursor: unknown;
-               emit(e: SourceEvent): void;
-               saveCursor(c: unknown): void }): Promise<{ stop(): Promise<void> }>;
+  start(ctx: {
+    config: Config;
+    cursor: unknown;
+    emit(e: SourceEvent): void;
+    saveCursor(c: unknown): void;
+  }): Promise<{ stop(): Promise<void> }>;
 }
 
 interface SourceEvent {
-  externalId: string;           // dedup key
-  kind: string;                 // e.g. 'ci.failed', 'review.submitted', 'comment.created'
+  externalId: string; // dedup key
+  kind: string; // e.g. 'ci.failed', 'review.submitted', 'comment.created'
   author?: string;
-  batchKey: string;             // events with the same key are batched together
-  readyAt?: Date;               // e.g. CI: only when all checks completed
-  payload: unknown;             // untrusted
+  batchKey: string; // events with the same key are batched together
+  readyAt?: Date; // e.g. CI: only when all checks completed
+  payload: unknown; // untrusted
   links: { label: string; url: string }[];
 }
 ```
@@ -329,6 +353,7 @@ interface SourceEvent {
   rule blocking `git push --force` and pushes to other branches).
 
 ### 8.2 GitHub PR source
+
 - Uses the user's `gh` CLI auth (`gh api`), no token handling in openc.
 - **Polling**, not webhooks: openc is localhost-only, and polling needs no
   tunnel. One poller per repo batches all watched PRs; conditional requests
@@ -343,21 +368,23 @@ interface SourceEvent {
   for lower latency.
 
 ### 8.3 Inbox and notifications
+
 - The inbox is a query over sessions in `waiting` plus open triggers with
   outcome `needs_user`/`failed`.
 - `NotificationChannel` interface (`browser` in MVP; `telegram`, `ntfy` later),
   with per-channel rules (e.g. only when no browser tab is focused).
 
 ### 8.4 openc agent tools
+
 An MCP server exposed to every session (in-process for the Agent SDK; stdio
 server for other backends):
 
-| Tool | Purpose |
-|---|---|
-| `openc_report_outcome(status, summary, pending_items[])` | Ends a triggered turn with a machine-readable outcome |
-| `openc_watch_pr(pr?)` | Link + watch a PR (defaults to the PR for the session branch) |
-| `openc_unwatch(watcher_id)` | Stop a watcher |
-| `openc_notify_user(message)` | Ask for attention without stopping |
+| Tool                                                     | Purpose                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------- |
+| `openc_report_outcome(status, summary, pending_items[])` | Ends a triggered turn with a machine-readable outcome         |
+| `openc_watch_pr(pr?)`                                    | Link + watch a PR (defaults to the PR for the session branch) |
+| `openc_unwatch(watcher_id)`                              | Stop a watcher                                                |
+| `openc_notify_user(message)`                             | Ask for attention without stopping                            |
 
 If a triggered turn ends without calling `openc_report_outcome`, the outcome
 is `needs_user` with the agent's last message as summary.
@@ -368,15 +395,15 @@ Every external dependency is a port (interface) with a real and a fake
 adapter, chosen in a single composition root (`src/server/composition.ts`).
 `pnpm dev:fake` and all automated tests use the fakes.
 
-| Port | Real | Fake | Fidelity source |
-|---|---|---|---|
-| `BackendAdapter` | Claude Agent SDK (later Codex, Pi) | replays recorded SDK message streams, scripted per scenario | recorded real sessions in `fixtures/claude-code/` |
-| `GitHubClient` | `gh api` | in-memory GitHub (PRs, checks, reviews, comments, ETags) | recorded API responses in `fixtures/github/` |
-| `Clock` | system time | manually advanced clock | n/a |
-| `ProcessSpawner` | `execa` | scripted processes | n/a |
-| `NotificationChannel` | browser push | in-memory recorder | n/a |
-| `FileWatcher` | chokidar | event emitter driven by tests | n/a |
-| `IdGenerator` | random UUIDs | sequential ids | n/a |
+| Port                  | Real                               | Fake                                                        | Fidelity source                                   |
+| --------------------- | ---------------------------------- | ----------------------------------------------------------- | ------------------------------------------------- |
+| `BackendAdapter`      | Claude Agent SDK (later Codex, Pi) | replays recorded SDK message streams, scripted per scenario | recorded real sessions in `fixtures/claude-code/` |
+| `GitHubClient`        | `gh api`                           | in-memory GitHub (PRs, checks, reviews, comments, ETags)    | recorded API responses in `fixtures/github/`      |
+| `Clock`               | system time                        | manually advanced clock                                     | n/a                                               |
+| `ProcessSpawner`      | `execa`                            | scripted processes                                          | n/a                                               |
+| `NotificationChannel` | browser push                       | in-memory recorder                                          | n/a                                               |
+| `FileWatcher`         | chokidar                           | event emitter driven by tests                               | n/a                                               |
+| `IdGenerator`         | random UUIDs                       | sequential ids                                              | n/a                                               |
 
 Not faked: git and SQLite (real, in temporary directories).
 

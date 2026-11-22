@@ -6,13 +6,13 @@ Decisions and their rationale: `docs/decisions/`.
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| `pnpm dev` | Server + web with real backends |
-| `pnpm dev:fake` | Same, with every external dependency faked |
-| `pnpm check` | Typecheck, lint, file-size check, boundary rules, unit + integration tests. Must pass before every commit |
-| `pnpm e2e` | Playwright tests against the app running on fakes |
-| `pnpm test:contract:live` | Contract tests against real dependencies (needs local logins; manual) |
+| Command                   | What it does                                                                                              |
+| ------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                | Server + web with real backends                                                                           |
+| `pnpm dev:fake`           | Same, with every external dependency faked                                                                |
+| `pnpm check`              | Typecheck, lint, file-size check, boundary rules, unit + integration tests. Must pass before every commit |
+| `pnpm e2e`                | Playwright tests against the app running on fakes                                                         |
+| `pnpm test:contract:live` | Contract tests against real dependencies (needs local logins; manual)                                     |
 
 ## Code style
 

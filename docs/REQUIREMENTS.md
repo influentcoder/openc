@@ -18,6 +18,7 @@ reference them.
 ## 1. Goals and non-goals
 
 **Goals**
+
 - One UI to run coding agents from several harnesses, side by side.
 - Use the user's existing **subscriptions** (Claude Pro/Max, ChatGPT plan)
   through the official CLIs, with API keys as an alternative.
@@ -29,6 +30,7 @@ reference them.
   when its PR's CI fails or receives review comments.
 
 **Non-goals (for now)**
+
 - Multi-user or hosted deployment. Single user, single machine.
 - Distributing the app to others (affects the subscription question, see §9).
 - Switching backend within a session.
@@ -75,6 +77,7 @@ reference them.
 ## 4. Sessions
 
 ### 4.1 Creating a session
+
 - **R-SES-1** "New session" dialog with:
   - **Backend** (Claude Code in MVP) and **model** (list provided by the backend).
   - **Folder**: a project folder, or **No folder** (scratch, see R-SES-6).
@@ -88,6 +91,7 @@ reference them.
 - **R-SES-3** Default backend and model = last used.
 
 ### 4.2 Workspaces
+
 - **R-SES-4 New worktree**: created at
   `~/.openc/worktrees/<repo-name>-<short-hash>/<session-slug>` on a new branch
   `openc/<session-slug>`, based on the chosen base branch's current commit.
@@ -100,10 +104,11 @@ reference them.
   pane still works (§6, shadow snapshots).
 
 ### 4.3 Lifecycle
+
 - **R-SES-8** Sessions can be renamed, resumed and deleted. Titles are
   auto-generated from the first message and editable.
 - **R-SES-9** Multiple sessions run in parallel. A configurable limit on
-  concurrently *live* agent processes (default 6). When the limit is hit, the
+  concurrently _live_ agent processes (default 6). When the limit is hit, the
   least recently used idle process is released first.
 - **R-SES-10** Status per session: `idle`, `running`, `waiting` (needs user
   input), `done`, `error`. Shown in the sidebar.
@@ -117,6 +122,7 @@ reference them.
   mid-session when the backend supports it.
 
 ### 4.4 Process release, resume and retention
+
 - **R-SES-14** An openc session (metadata, event log, workspace) is permanent until
   deleted; the backend process is transient. Viewing a session never requires
   its process: transcript and diffs come from openc's own storage.
@@ -141,6 +147,7 @@ reference them.
   show a hint with the approximate context size (it counts against plan usage).
 
 ### 4.5 Archive
+
 - **R-SES-21** Sessions can be **archived**: hidden from the sidebar, still in
   History and search, workspace kept. Un-archive at any time.
 - **R-SES-22** Auto-archive sessions with no activity for N days (default 14,
@@ -236,6 +243,7 @@ schedule (later)
 ```
 
 ### 9.1 General
+
 - **R-W-1** Watchers are attached to a session (or, for sources like Telegram, to a
   project with a "create new session" action). They are listed and can be
   paused/removed from the session header and a global Watchers view.
@@ -261,6 +269,7 @@ schedule (later)
   link), distinct from user messages.
 
 ### 9.2 GitHub PR watcher (first source)
+
 - **R-W-GH-1** A PR can be linked to a session: automatically when openc opens the
   PR (R-DIFF-4) or when a PR's head is the session branch; manually ("watch
   PR #123 / URL"); or by the agent itself via an openc tool.
@@ -287,13 +296,16 @@ schedule (later)
   ARCHITECTURE §8); no public endpoint required.
 
 ### 9.3 openc tools for agents
+
 openc exposes a small tool set to every session (as an MCP server, so it works
 across backends):
+
 - `openc_report_outcome(status, summary, pending_items[])` — see R-W-5.
 - `openc_watch_pr(pr)` / `openc_unwatch(…)` — the agent subscribes after opening a PR.
 - `openc_notify_user(message)` — ask for attention without ending the turn.
 
 ### 9.4 Other sources
+
 Watchers are a first-class, generic concept: any source that can emit events
 plugs into the same engine, policies, inbox and UI. The GitHub PR source is
 only the first. Examples of possible later sources (none committed yet):
@@ -305,6 +317,7 @@ webhook.
   a prompt template; no changes to the engine, storage or UI.
 
 ### 9.5 Notifications
+
 - **R-N-1** Browser notifications (MVP). A notification-channel abstraction so
   other channels (e.g. ntfy, email, chat apps) can be added later.
 
@@ -332,13 +345,13 @@ webhook.
 
 ## 11. Milestones
 
-| # | Scope |
-|---|---|
-| M0 | Spike: Agent SDK with subscription auth, streaming, interrupt, resume (incl. `sessionStore`), bypass mode, model list. Confirm worktree + snapshot approach. |
-| M1 | Skeleton: server, web UI, sidebar, chat with Claude Code, persistence, folder picker, scratch sessions, release/resume. |
-| M2 | Worktrees, parallel sessions, status badges, notifications, delete with warnings, archive. |
-| M3 | Diff pane: session/last-turn views, line comments, commit/revert/merge/PR/discard. |
-| M4 | Watchers: framework, GitHub PR watcher, openc tools for agents, inbox. |
-| M5 | History view + search, usage display, images, plan mode/to-dos/subagents rendering, slash commands. |
-| M6 | Codex adapter. |
-| Later | More watcher sources and notification channels as needed, Pi adapter, shared MCP config, remote access (e.g. Tailscale), macOS. |
+| #     | Scope                                                                                                                                                        |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M0    | Spike: Agent SDK with subscription auth, streaming, interrupt, resume (incl. `sessionStore`), bypass mode, model list. Confirm worktree + snapshot approach. |
+| M1    | Skeleton: server, web UI, sidebar, chat with Claude Code, persistence, folder picker, scratch sessions, release/resume.                                      |
+| M2    | Worktrees, parallel sessions, status badges, notifications, delete with warnings, archive.                                                                   |
+| M3    | Diff pane: session/last-turn views, line comments, commit/revert/merge/PR/discard.                                                                           |
+| M4    | Watchers: framework, GitHub PR watcher, openc tools for agents, inbox.                                                                                       |
+| M5    | History view + search, usage display, images, plan mode/to-dos/subagents rendering, slash commands.                                                          |
+| M6    | Codex adapter.                                                                                                                                               |
+| Later | More watcher sources and notification channels as needed, Pi adapter, shared MCP config, remote access (e.g. Tailscale), macOS.                              |
