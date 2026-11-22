@@ -25,6 +25,20 @@ export async function collectTurn(session: BackendSession): Promise<BackendEvent
   throw new Error("Event stream ended before the turn completed");
 }
 
+export async function waitForEvent(
+  session: BackendSession,
+  predicate: (event: BackendEvent) => boolean,
+): Promise<BackendEvent[]> {
+  const events: BackendEvent[] = [];
+  for await (const event of session.events) {
+    events.push(event);
+    if (predicate(event)) {
+      return events;
+    }
+  }
+  throw new Error("Event stream ended before the expected event");
+}
+
 export function describeBackendAdapterContract(
   name: string,
   createHarness: () => Promise<BackendContractHarness>,
@@ -71,6 +85,7 @@ export function describeBackendAdapterContract(
       const harness = await createHarness();
       const session = await harness.adapter.start(harness);
       await session.send(harness.longRunningPrompt);
+      await waitForEvent(session, (event) => event.type === "assistant.delta");
       await session.interrupt();
       expect((await collectTurn(session)).at(-1)).toMatchObject({ reason: "interrupted" });
       await session.close();
