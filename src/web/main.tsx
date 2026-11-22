@@ -1,11 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { resolveAccessToken } from "./api/access-token.ts";
-import { createHttpApiClient } from "./api/api-client.ts";
-import { WebSocketLiveConnection } from "./api/live-connection.ts";
 import { App } from "./app/App.tsx";
 import { ServicesProvider } from "./app/services.tsx";
+import { resolveAccessToken } from "./server-connection/access-token.ts";
+import { createHttpApiClient } from "./server-connection/api-client.ts";
+import { WebSocketLiveConnection } from "./server-connection/live-connection.ts";
 import "./styles.css";
 
 function liveUrl(token: string): string {

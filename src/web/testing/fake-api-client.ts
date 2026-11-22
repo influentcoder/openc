@@ -1,7 +1,7 @@
 import type { DirectoryListing } from "../../shared/api.ts";
 import { BackendIdSchema, type SessionId, SessionIdSchema } from "../../shared/ids.ts";
 import type { SessionSummary } from "../../shared/session.ts";
-import type { ApiClient } from "../api/api-client.ts";
+import type { ApiClient } from "../server-connection/api-client.ts";
 
 export const fakeBackend = BackendIdSchema.parse("fake");
 

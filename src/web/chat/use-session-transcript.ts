@@ -1,7 +1,7 @@
 import { useEffect, useReducer } from "react";
 import type { SessionId } from "../../shared/ids.ts";
-import type { SessionStreamMessage } from "../api/live-connection.ts";
 import { useServices } from "../app/services.tsx";
+import type { SessionStreamMessage } from "../server-connection/live-connection.ts";
 import {
   applyDelta,
   applyEnvelope,

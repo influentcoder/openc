@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext } from "react";
-import type { ApiClient } from "../api/api-client.ts";
-import type { LiveConnection } from "../api/live-connection.ts";
+import type { ApiClient } from "../server-connection/api-client.ts";
+import type { LiveConnection } from "../server-connection/live-connection.ts";
 
 export interface ClientServices {
   api: ApiClient;

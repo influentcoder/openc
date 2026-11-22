@@ -1,8 +1,8 @@
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import type { SessionSummary } from "../../shared/session.ts";
-import type { SessionListMessage } from "../api/live-connection.ts";
 import { useServices } from "../app/services.tsx";
+import type { SessionListMessage } from "../server-connection/live-connection.ts";
 
 export const sessionsQueryKey = ["sessions"] as const;
 

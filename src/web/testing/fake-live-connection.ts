@@ -3,7 +3,7 @@ import type {
   LiveConnection,
   SessionListMessage,
   SessionStreamMessage,
-} from "../api/live-connection.ts";
+} from "../server-connection/live-connection.ts";
 
 export class FakeLiveConnection implements LiveConnection {
   private readonly sessionListeners = new Map<

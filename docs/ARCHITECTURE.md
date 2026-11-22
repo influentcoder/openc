@@ -59,7 +59,7 @@ openc/
       agent-tools/       # (planned) openc MCP tools exposed to sessions
       notify/            # (planned) notification channels
     web/
-      api/               # HTTP client, live websocket connection, token
+      server-connection/ # HTTP client, live websocket connection, token
       app/               # App shell, services context, hash routing
       sessions/          # sidebar
       chat/              # transcript model + views, composer
